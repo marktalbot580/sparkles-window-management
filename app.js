@@ -536,6 +536,7 @@ const VIEWS = { round: renderRound, remind: renderRemind, cal: renderCal, cust: 
 const ACT = {
   tab: d => go(d.v, { search: '', pickDay: false }),
   goSettings: () => go('settings'),
+  goRound: () => { ui.roundDate = todayISO(); go('round'); window.scrollTo(0, 0); },
   complete: d => completeStop(d.id, ui.roundDate),
   undoJob: d => undoJob(d.id),
   pay: d => { const i = invoices.find(x => x.id === d.id); if (i) setPaid(i, d.m); },
