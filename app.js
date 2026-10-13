@@ -132,6 +132,14 @@ function emailText(inv) {
   return `Hi ${firstName(inv.customer.name)},\n\nThank you – your windows at ${addrFirst(inv.jobAddress) || 'your property'} were cleaned on ${ukDate(inv.workDate || inv.date)}. Your invoice ${inv.number} for ${money(T.total)} is attached${inv.paid ? ' (paid – thank you).' : '.'}` +
     (inv.paid ? '' : `\n\nPlease pay by ${ukDate(inv.due)} using reference ${inv.number}.${bank ? '\n\n' + bank : ''}`) + `\n\nKind regards,\n${bizName()}${settings.phone ? '\n' + settings.phone : ''}`;
 }
+/* how (and whether) an invoice has gone to the customer */
+function sentInfo(i) {
+  if (!i.sent) return { ok: false, short: 'Not sent', long: 'Not sent to the customer yet' };
+  const via = i.sentTo === 'SMS' ? 'Texted' : i.sentTo === 'manual' ? 'Sent' : i.sentTo ? 'Emailed' : 'Sent';
+  const when = new Date(i.sent).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return { ok: true, short: via + ' ✓', long: via + (i.sentTo && i.sentTo !== 'SMS' && i.sentTo !== 'manual' ? ' to ' + i.sentTo : '') + ' · ' + when };
+}
+const sentBadge = i => { const x = sentInfo(i); return `<span class="badge ${x.ok ? 'sent' : 'notsent'}">${x.short}</span>`; };
 const invFileName = i => `Invoice ${i.number} - ${(i.customer.name || 'Customer').replace(/[^\w ]+/g, '')}.pdf`;
 async function sendInvoiceEmail(inv, manual) {
   if (!inv.customer.email) { if (manual) toast('This invoice has no email address'); return false; }
@@ -151,10 +159,10 @@ async function sendInvoiceEmail(inv, manual) {
 async function shareInvoice(inv) {
   try {
     const blob = await buildInvPdf(inv, settings), file = new File([blob], invFileName(inv), { type: 'application/pdf' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Invoice ' + inv.number, text: emailText(inv) }); inv.sent = Date.now(); touch(inv); saveI(); render(); return true; }
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Invoice ' + inv.number, text: emailText(inv) }); inv.sent = Date.now(); inv.sentTo = ''; touch(inv); saveI(); render(); return true; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = invFileName(inv); document.body.appendChild(a); a.click(); a.remove();
     location.href = `mailto:${encodeURIComponent(inv.customer.email || '')}?subject=${encodeURIComponent('Invoice ' + inv.number + ' from ' + bizName())}&body=${encodeURIComponent(emailText(inv) + '\n\n(Attach the downloaded PDF)')}`;
-    inv.sent = Date.now(); touch(inv); saveI(); render(); return true;
+    inv.sent = Date.now(); inv.sentTo = ''; touch(inv); saveI(); render(); return true;
   } catch (e) { if (e.name !== 'AbortError') toast('Could not share: ' + e.message); return false; }
 }
 async function openInvPdf(inv) {
@@ -310,7 +318,7 @@ function stopHtml(s, i) {
     const inv = s.inv, st = inv ? invStatus(inv) : '';
     const sent = !inv ? '' : inv.sent ? (inv.sentTo === 'SMS' ? 'texted ✓' : 'emailed ✓') : pending[inv.id] ? 'emailing in a moment…' : inv.sendError ? 'email failed – tap Invoice' : inv.customer.email ? 'not emailed yet' : 'no email – text instead';
     return `<div class="stop done"><div class="row top"><div class="num">✓</div><div class="grow"><div class="nm">${esc(c.name)}</div><div class="ad">${a}</div></div><div class="pr">${money(s.job.price)}</div></div>
-      ${inv ? `<div class="row sp" style="margin-top:10px"><span class="small muted">${esc(inv.number)} · ${sent}</span><span class="badge ${st}">${st}</span></div>
+      ${inv ? `<div class="row sp" style="margin-top:10px"><span class="small muted">${esc(inv.number)} · ${esc(pending[inv.id] ? 'sending in a moment…' : inv.sendError ? 'email failed – tap Open invoice' : sentInfo(inv).long)}</span><span class="row" style="gap:6px">${sentBadge(inv)}<span class="badge ${st}">${st}</span></span></div>
       <div class="seg" style="margin-top:10px">${PAY.map(m => `<button type="button" class="pay ${inv.paid && inv.payMethod === m ? 'on' : ''}" data-act="pay" data-id="${inv.id}" data-m="${m}">${m}</button>`).join('')}</div>
       <div class="acts">${!inv.customer.email && c.phone && !inv.paid ? `<a class="btn blue sm" data-act="smsSent" data-id="${inv.id}" href="${esc(smsHref(c.phone, payTextFor(inv)))}">${inv.sent ? 'Text again' : 'Text payment request'}</a>` : ''}<button class="btn ghost sm" data-act="openInv" data-id="${inv.id}">Open invoice</button>${!inv.sent && !inv.paid ? `<button class="btn ghost sm" data-act="undoJob" data-id="${s.job.id}">Undo</button>` : ''}</div>` : ''}</div>`;
   }
@@ -328,6 +336,7 @@ function renderRound(v) {
   const route = ui.route && ui.route.date === date ? ui.route : null;
   const links = S.todo.length > 1 ? routeLinks(S.todo) : [];
   const unsent = CLOUD.on && CLOUD.signedIn() ? invoices.filter(i => !i.sent && i.customer.email && !pending[i.id]).length : 0;
+  const unsentAny = invoices.filter(i => !i.sent && !i.paid && !pending[i.id]).length;
   v.innerHTML = `
     <div class="daynav"><button data-act="dayPrev" aria-label="Previous day">‹</button><div class="day">${date === today ? 'Today · ' : date === addDays(today, 1) ? 'Tomorrow · ' : ''}${dayLabel(date)}</div><button data-act="dayNext" aria-label="Next day">›</button></div>
     ${date !== today ? `<button class="btn ghost sm block" data-act="dayToday" style="margin-bottom:12px">Back to today</button>` : ''}
@@ -338,11 +347,12 @@ function renderRound(v) {
     ${route && route.missing ? `<div class="notice warn">${route.missing} house${route.missing > 1 ? 's have' : ' has'} no valid postcode, so ${route.missing > 1 ? 'they are' : 'it is'} at the end. Add the postcode on the customer.</div>` : ''}
     ${links.length ? `<div class="chips">${links.map(l => `<a class="chip on" style="text-decoration:none" href="${l.url}" target="_blank" rel="noopener">Maps: stops ${l.from}–${l.to}</a>`).join('')}</div>` : ''}
     ${S.todo.length ? S.todo.map((s, i) => stopHtml(s, i)).join('') : `<div class="empty">${S.done.length ? 'All done for this day 🎉' : 'Nobody due on this day.<br>Add customers or pick another date in the Calendar.'}</div>`}
-    ${S.done.length ? `<h2>Done (${S.done.length})</h2>${S.done.map(s => stopHtml(s, 0)).join('')}` : ''}
+    ${S.done.length ? `<h2>Done (${S.done.length})${S.done.some(d => d.inv && !d.inv.sent) ? ' · <span style="color:#B26C0A">' + S.done.filter(d => d.inv && !d.inv.sent).length + ' invoice' + (S.done.filter(d => d.inv && !d.inv.sent).length > 1 ? 's' : '') + ' not sent</span>' : ''}</h2>${S.done.map(s => stopHtml(s, 0)).join('')}` : ''}
     <div class="gap"></div>
     <button class="btn block" data-act="addToRound">+ Add a customer to this day</button>
     ${S.todo.length && date > today ? `<div class="gap"></div><button class="btn block" data-act="remind">Send reminder texts for this day</button>` : ''}
-    ${unsent ? `<div class="gap"></div><div class="notice warn">${unsent} invoice${unsent > 1 ? 's' : ''} not emailed yet. <a href="#" data-act="sendAll" style="color:inherit;font-weight:700">Send them now</a></div>` : ''}`;
+    ${unsent ? `<div class="gap"></div><div class="notice warn">${unsent} invoice${unsent > 1 ? 's' : ''} not emailed yet. <a href="#" data-act="sendAll" style="color:inherit;font-weight:700">Send them now</a></div>` : ''}
+    ${unsentAny > unsent ? `<div class="gap"></div><div class="notice warn">${unsentAny - unsent} invoice${unsentAny - unsent > 1 ? 's have' : ' has'} not been sent (no email, or not texted yet). Find them under Sales → Not sent.</div>` : ''}`;
 }
 function renderRemind(v) {
   const date = ui.roundDate, S = stopsFor(date).todo, when = date === addDays(todayISO(), 1) ? 'tomorrow' : 'on ' + dayLabel(date);
@@ -439,15 +449,15 @@ function renderSales(v) { return ui.salesTab === 'stats' ? renderStats(v) : rend
 function renderInvoices(v) {
   const f = ui.invFilter, list = [...invoices].sort((a, b) => (b.date + b.number).localeCompare(a.date + a.number));
   const open = invoices.filter(i => !i.paid), late = open.filter(i => invStatus(i) === 'overdue'), owed = open.reduce((a, i) => a + invTotals(i).total, 0);
-  const shown = list.filter(i => f === 'all' || (f === 'unpaid' && !i.paid) || (f === 'paid' && i.paid) || (f === 'overdue' && invStatus(i) === 'overdue'));
+  const shown = list.filter(i => f === 'all' || (f === 'unpaid' && !i.paid) || (f === 'paid' && i.paid) || (f === 'overdue' && invStatus(i) === 'overdue') || (f === 'notsent' && !i.sent));
   const chip = (k, l) => `<button class="chip ${f === k ? 'on' : ''}" data-act="invFilter" data-f="${k}">${l}</button>`;
   v.innerHTML = `<h1>Sales</h1>${salesTabs()}
     <div class="card"><div class="row sp"><div><div class="small muted">Outstanding</div><div class="big">${money(owed)}</div></div><div style="text-align:right"><div class="small muted">${open.length} unpaid</div>${late.length ? `<div class="small" style="color:var(--bad);font-weight:700">${late.length} overdue</div>` : ''}</div></div></div>
     <button class="btn blue block" data-act="newInv">+ New invoice</button><div class="gap"></div>
     <button class="btn block" data-act="csvOut">Download for my accountant (CSV)</button><div class="gap"></div>
-    <div class="chips">${chip('all', 'All')}${chip('unpaid', 'Unpaid')}${late.length ? chip('overdue', 'Overdue (' + late.length + ')') : ''}${chip('paid', 'Paid')}</div>
+    <div class="chips">${chip('all', 'All')}${chip('unpaid', 'Unpaid')}${late.length ? chip('overdue', 'Overdue (' + late.length + ')') : ''}${chip('paid', 'Paid')}${invoices.some(i => !i.sent) ? chip('notsent', 'Not sent (' + invoices.filter(i => !i.sent).length + ')') : ''}</div>
     ${shown.length ? shown.map(i => `<button class="item" data-act="openInv" data-id="${i.id}"><div class="row sp"><span class="t">${esc(i.customer.name || 'No customer')}</span><span class="badge ${invStatus(i)}">${invStatus(i)}</span></div>
-      <div class="s">${esc(addrFirst(i.jobAddress) || 'No address')}</div><div class="row sp"><span class="s">${esc(i.number)} · ${ukDate(i.date)}${i.paid ? ' · ' + esc(i.payMethod || '') : ' · due ' + ukDate(i.due)}${i.sent ? (i.sentTo === 'SMS' ? ' · texted ✓' : ' · emailed ✓') : ''}</span><span class="t">${money(invTotals(i).total)}</span></div></button>`).join('') : `<div class="empty">${invoices.length ? 'Nothing in this view.' : 'No invoices yet.<br>They appear here when you tap Complete on the round.'}</div>`}`;
+      <div class="s">${esc(addrFirst(i.jobAddress) || 'No address')}</div><div class="row sp"><span class="s">${esc(i.number)} · ${ukDate(i.date)}${i.paid ? ' · ' + esc(i.payMethod || '') : ' · due ' + ukDate(i.due)}</span><span class="row" style="gap:6px">${sentBadge(i)}<span class="t">${money(invTotals(i).total)}</span></span></div></button>`).join('') : `<div class="empty">${invoices.length ? 'Nothing in this view.' : 'No invoices yet.<br>They appear here when you tap Complete on the round.'}</div>`}`;
 }
 function renderInvEdit(v) {
   const i = ui.inv, T = invTotals(i);
@@ -455,6 +465,7 @@ function renderInvEdit(v) {
     <div class="card"><div class="row sp"><span class="t">${i.paid ? 'Paid on ' + ukDate(i.paidDate) : 'Mark as paid'}</span></div>
       <div class="seg" style="margin-top:10px">${PAY.map(m => `<button type="button" class="pay ${i.paid && i.payMethod === m ? 'on' : ''}" data-act="payHere" data-m="${m}">${m}</button>`).join('')}</div>
       <p class="small muted" style="margin:8px 0 0">${i.paid ? 'Tap the highlighted button again to mark it unpaid.' : 'One tap marks it paid and records how.'}</p></div>
+    <div class="card"><div class="row sp"><span class="t">${esc(sentInfo(i).long)}</span>${sentBadge(i)}</div><div class="acts"><button class="btn sm" data-act="markSent">${i.sent ? 'Mark as not sent' : 'Mark as sent'}</button></div></div>
     <button class="btn blue block" data-act="emailInv">${i.sent ? 'Email it again' : 'Email invoice'}${i.customer.email ? ' to ' + esc(i.customer.email) : ''}</button>
     ${i.sendError ? `<p class="err">Last attempt failed: ${esc(i.sendError)}</p>` : ''}<div class="gap"></div>
     <button class="btn block" data-act="viewInv">View invoice (PDF)</button>
@@ -564,6 +575,7 @@ const ACT = {
   invFilter: d => { ui.invFilter = d.f; render(); },
   statsYear: d => { ui.statsYear = +d.y; render(); },
   newInv: () => { const i = makeInvoice(null); invoices.unshift(i); saveI(); go('inv', { inv: i }); },
+  markSent: () => { const i = ui.inv; if (i.sent) { i.sent = 0; i.sentTo = ''; } else { i.sent = Date.now(); i.sentTo = 'manual'; } touch(i); saveI(); render(); },
   emailInv: () => sendInvoiceEmail(ui.inv, true),
   viewInv: () => openInvPdf(ui.inv),
   addLine: () => { ui.inv.lines.push({ d: '', q: '1', p: '' }); touch(ui.inv); saveI(); render(); },
