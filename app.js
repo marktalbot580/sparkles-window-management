@@ -218,6 +218,58 @@ async function geocode(pcs) {
   }
   return out;
 }
+/* ---------- weather (Open-Meteo, free, no key; location = your home postcode) ---------- */
+const WX = { data: null, at: 0, busy: false, err: '', key: '' };
+const wxIcon = c => c === 0 ? '☀️' : c <= 2 ? '🌤️' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : c <= 67 ? '🌧️' : c <= 77 ? '🌨️' : c <= 82 ? '🌧️' : c <= 86 ? '🌨️' : '⛈️';
+async function wxLocation() {
+  const pc = normPC(settings.homePostcode) || normPC((customers.find(c => c.postcode) || {}).postcode);
+  if (!pc) throw new Error('Add your home postcode in Settings to see the weather');
+  const cached = LS.get('swm_wxloc', null); if (cached && cached.pc === pc) return cached;
+  const g = await geocode([pc]); if (!g[pc]) throw new Error('Postcode not found');
+  const loc = { pc, lat: g[pc].lat, lng: g[pc].lng }; LS.set('swm_wxloc', loc); return loc;
+}
+const wxPc = () => normPC(settings.homePostcode) || normPC((customers.find(c => c.postcode) || {}).postcode);
+async function loadWeather(force) {
+  if (WX.key !== wxPc()) { force = true; WX.key = wxPc(); }   // postcode changed: look again straight away
+  if (WX.busy || (!force && WX.at && Date.now() - WX.at < 30 * 60000)) return;
+  WX.busy = true;
+  try {
+    const l = await wxLocation();
+    const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + l.lat.toFixed(3) + '&longitude=' + l.lng.toFixed(3) +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min&hourly=precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m&wind_speed_unit=mph&timezone=Europe%2FLondon&forecast_days=10';
+    const r = await fetch(u); if (!r.ok) throw new Error('Weather service error ' + r.status);
+    const j = await r.json(), days = {};
+    j.daily.time.forEach((d, i) => { days[d] = { code: j.daily.weather_code[i], hi: Math.round(j.daily.temperature_2m_max[i]), lo: Math.round(j.daily.temperature_2m_min[i]), prob: 0, mm: 0, wind: 0, gust: 0, wet: -1 }; });
+    j.hourly.time.forEach((t, i) => {
+      const d = days[t.slice(0, 10)], h = +t.slice(11, 13); if (!d || h < 8 || h > 17) return;   // working hours 8am–6pm
+      if (d.wet < 0 && ((j.hourly.precipitation_probability[i] || 0) >= 40 || (j.hourly.precipitation[i] || 0) >= 0.3)) d.wet = h;
+      d.prob = Math.max(d.prob, j.hourly.precipitation_probability[i] || 0); d.mm += j.hourly.precipitation[i] || 0;
+      d.wind = Math.max(d.wind, Math.round(j.hourly.wind_speed_10m[i] || 0)); d.gust = Math.max(d.gust, Math.round(j.hourly.wind_gusts_10m[i] || 0));
+    });
+    Object.values(days).forEach(d => { d.mm = Math.round(d.mm * 10) / 10; d.v = wxVerdict(d); });
+    WX.data = days; WX.at = Date.now(); WX.err = '';
+  } catch (e) { WX.err = navigator.onLine === false ? 'Offline – weather unavailable' : e.message; WX.at = Date.now() - 25 * 60000; }   // try again in 5 minutes
+  WX.busy = false; if (ui.view === 'round') render();
+}
+function wxVerdict(d) {
+  /* windows can only be cleaned dry, so even a modest chance of rain counts against the day */
+  if (d.prob >= 50 || d.mm >= 1) return { k: 'bad', t: 'Rain likely – too wet to clean' };
+  if (d.gust >= 40 || d.wind >= 30) return { k: 'bad', t: 'Very windy' };
+  if (d.prob >= 25 || d.mm >= 0.2) return { k: 'meh', t: 'Showers possible – risky' };
+  if (d.gust >= 30 || d.wind >= 22) return { k: 'meh', t: 'Dry but breezy' };
+  return { k: 'good', t: 'Dry – good to clean' };
+}
+function weatherHtml(date) {
+  if (!WX.data) { loadWeather(); return WX.err ? `<div class="notice small">${esc(WX.err)}</div>` : ''; }
+  loadWeather();
+  const d = WX.data[date], keys = Object.keys(WX.data).filter(k => k >= todayISO()).slice(0, 7);
+  const next = keys.find(k => k > date && WX.data[k].v.k === 'good');
+  const strip = keys.map(k => { const x = WX.data[k]; return `<button class="wxd ${k === date ? 'on' : ''} ${x.v.k}" data-act="calDay" data-d="${k}"><b>${new Date(k + 'T12:00').toLocaleDateString('en-GB', { weekday: 'short' })}</b><span>${wxIcon(x.code)}</span><small>${x.hi}°</small><small>${x.prob}%</small></button>`; }).join('');
+  return `<div class="card wx ${d ? d.v.k : ''}">${d ? `<div class="row sp"><div class="row" style="gap:10px"><span style="font-size:30px">${wxIcon(d.code)}</span><div><div class="t">${d.v.t}</div><div class="small muted">${d.hi}° / ${d.lo}° · rain ${d.prob}%${d.mm ? ' (' + d.mm + ' mm)' : ''} · wind ${d.wind} mph, gusts ${d.gust}</div></div></div></div>
+    <div class="small" style="margin-top:6px">${d.wet < 0 ? 'Dry all through working hours.' : d.wet <= 8 ? 'Wet from the start of the day.' : 'Dry until about ' + (d.wet > 12 ? d.wet - 12 : d.wet) + (d.wet >= 12 ? 'pm' : 'am') + ', then rain.'}</div>
+    ${d.v.k !== 'good' && next ? `<div class="small" style="margin-top:8px">Next dry day: <a href="#" data-act="calDay" data-d="${next}" style="color:inherit;font-weight:700">${new Date(next + 'T12:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</a></div>` : ''}` : '<div class="small muted">No forecast that far ahead yet.</div>'}
+    <div class="wxs">${strip}</div><div class="small muted" style="margin-top:6px">Working hours 8am–6pm · <a href="#" data-act="wxRefresh" style="color:inherit">refresh</a></div></div>`;
+}
 function hav(a, b) {
   const R = 6371, rad = x => x * Math.PI / 180, dLa = rad(b.lat - a.lat), dLo = rad(b.lng - a.lng);
   const h = Math.sin(dLa / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLo / 2) ** 2;
@@ -342,6 +394,7 @@ function renderRound(v) {
     ${date !== today ? `<button class="btn ghost sm block" data-act="dayToday" style="margin-bottom:12px">Back to today</button>` : ''}
     <div class="card"><div class="row sp"><div><div class="small muted">${S.todo.length + S.done.length} houses · ${S.done.length} done</div><div class="big">${money(total)}</div></div>
       <div style="text-align:right"><div class="small muted">${S.todo.length} to go</div>${route ? `<div class="small" style="color:var(--blue2);font-weight:700">≈ ${route.miles} miles</div>` : ''}</div></div></div>
+    ${weatherHtml(date)}
     ${!settings.homePostcode ? `<div class="notice">Add your home postcode in <a href="#" data-act="goSettings" style="color:inherit;font-weight:700">Settings</a> so the route starts from your door.</div>` : ''}
     ${S.todo.length > 1 ? `<button class="btn blue block" data-act="plan" ${ui.planning ? 'disabled' : ''}>${ui.planning ? 'Planning the best route…' : route ? '↻ Re-plan the route' : '🧭 Plan the best route'}</button><div class="gap"></div>` : ''}
     ${route && route.missing ? `<div class="notice warn">${route.missing} house${route.missing > 1 ? 's have' : ' has'} no valid postcode, so ${route.missing > 1 ? 'they are' : 'it is'} at the end. Add the postcode on the customer.</div>` : ''}
@@ -536,6 +589,7 @@ const VIEWS = { round: renderRound, remind: renderRemind, cal: renderCal, cust: 
 const ACT = {
   tab: d => go(d.v, { search: '', pickDay: false }),
   goSettings: () => go('settings'),
+  wxRefresh: () => loadWeather(true),
   goRound: () => { ui.roundDate = todayISO(); go('round'); window.scrollTo(0, 0); },
   complete: d => completeStop(d.id, ui.roundDate),
   undoJob: d => undoJob(d.id),

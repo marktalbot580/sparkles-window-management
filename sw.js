@@ -1,5 +1,5 @@
 // Offline cache so the round still opens with no signal.
-const CACHE = 'swm-v8';
+const CACHE = 'swm-v10';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'cloud.js', 'config.js', 'pdf-inv.js', 'manifest.json', 'logo.svg', 'icon-192.png', 'icon-512.png',
   'lib/jspdf.umd.min.js', 'fonts/nunito-latin.woff2'];
 

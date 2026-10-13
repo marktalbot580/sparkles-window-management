@@ -36,6 +36,15 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: errors.append(str(e)))
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
     pg.route('https://api.postcodes.io/postcodes', fake_geo)
+    def fake_wx(route):
+        import datetime
+        today = datetime.date.today(); days = [(today + datetime.timedelta(d)).isoformat() for d in range(10)]
+        hours = [f'{d}T{h:02d}:00' for d in days for h in range(24)]
+        # day 0 rainy, other days dry
+        prob = [80 if h.startswith(days[0]) else 5 for h in hours]
+        route.fulfill(status=200, content_type='application/json', body=json.dumps({'daily': {'time': days, 'weather_code': [63] + [1]*9, 'temperature_2m_max': [14]*10, 'temperature_2m_min': [8]*10},
+            'hourly': {'time': hours, 'precipitation_probability': prob, 'precipitation': [0.5 if p > 50 else 0 for p in prob], 'wind_speed_10m': [10]*len(hours), 'wind_gusts_10m': [15]*len(hours)}}))
+    pg.route('https://api.open-meteo.com/**', fake_wx)
     pg.route('**/config.js', lambda r: r.fulfill(status=200, content_type='application/javascript', body="window.SWM_CONFIG={url:'',key:''};"))   # test the local-only app
     pg.goto(BASE); pg.wait_for_selector('#nav button')
     check('app opens on the Round screen', 'Round' in pg.inner_text('#barSub'))
@@ -57,6 +66,10 @@ with sync_playwright() as p:
 
     # the round
     pg.click('#nav button:has-text("Round")'); pg.wait_for_selector('.stop')
+    pg.wait_for_selector('.wx')
+    check('weather card shows rain warning today', 'Rain likely' in pg.inner_text('.wx'), pg.inner_text('.wx'))
+    check('weather suggests a next good day', 'Next dry day' in pg.inner_text('.wx'))
+    check('seven day strip', pg.locator('.wxd').count() == 7)
     check('four houses on today\'s round', pg.locator('.stop').count() == 4, pg.locator('.stop').count())
     pg.click('button[data-act="plan"]'); pg.wait_for_selector('text=miles')
     check('route planned with a mileage', 'miles' in pg.inner_text('.card'))
