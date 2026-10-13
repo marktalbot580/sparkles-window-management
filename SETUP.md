@@ -6,7 +6,7 @@ To get logins, sync between devices and automatic invoice emails, do these in or
 ## 1. Put the app on the web (GitHub Pages, free)
 1. On github.com create a **new repository** (for example `windowroundpro`), public.
 2. Upload every file in this folder to it (keep the `fonts`, `lib` and `backend` folders).
-3. Repository **Settings → Pages → Build from branch → main / root**. After a minute the app is live at `https://windowroundpro.com`.
+3. Repository **Settings → Pages → Build from branch → main / root**. After a minute the app is live at `https://app.windowroundpro.com`.
 4. On the phone: open that address, then **Share → Add to Home Screen**.
 
 ## 2. Supabase (logins + cloud storage) – new project
