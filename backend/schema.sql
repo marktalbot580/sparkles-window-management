@@ -29,3 +29,7 @@ create policy docs_read   on public.docs for select using (user_id = auth.uid())
 create policy docs_insert on public.docs for insert with check (user_id = auth.uid());
 create policy docs_update on public.docs for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 -- no delete policy: the app marks rows deleted instead, so deletions sync to every phone
+
+-- newer Supabase projects do not grant table access to the API roles automatically
+grant usage on schema public to authenticated;
+grant select, insert, update on public.docs to authenticated;

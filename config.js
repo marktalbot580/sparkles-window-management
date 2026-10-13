@@ -1,7 +1,2 @@
-/* Fill these in after creating your Supabase project (Project Settings > API).
-   Leave url and key blank to run in local-only mode (everything stays on this phone, nothing syncs).
-   The publishable (anon) key is designed to be public. NEVER put the service_role key or any secret key in this file. */
-window.SWM_CONFIG = {
-  url: '',   // e.g. https://abcdefgh.supabase.co
-  key: ''    // the publishable / anon key
-};
+// Public connection details for this app's own Supabase project (safe to publish: the publishable key only works within row-level security).
+window.SWM_CONFIG = { url: 'https://bdgmkdrqhddcpubpedui.supabase.co', key: 'sb_publishable_AfgY42B4CJ7c6kTKHqmouw_y5tdKhKT' };
