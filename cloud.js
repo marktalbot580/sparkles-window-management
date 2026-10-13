@@ -1,4 +1,4 @@
-/* Sparkles Window Management – sign-in and cloud sync (Supabase, plain fetch calls, no library).
+/* Window Round Pro – sign-in and cloud sync (Supabase, plain fetch calls, no library).
    When config.js has no Supabase details the app runs in local-only mode: everything stays on this phone. */
 'use strict';
 const CLOUD = (() => {
@@ -129,7 +129,7 @@ const CLOUD = (() => {
   }
 
   /* ---------- the sign-in screen ---------- */
-  let mode = 'in', err = '', note = '', working = false;
+  let mode = 'in', err = '', note = '', working = false, lastEmail = '';
   const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function gateEl() {
     let g = document.getElementById('gate');
@@ -143,9 +143,9 @@ const CLOUD = (() => {
     gateEl().innerHTML = `<form class="gate-card" autocomplete="on">
       <img src="logo.svg" alt="">
       <h1>${fg ? 'Reset password' : up ? 'Create your account' : 'Welcome back'}</h1>
-      <p>Sparkles Window Management</p>
+      <p>Window Round Pro</p>
       ${note ? `<div class="notice">${E(note)}</div>` : ''}${err ? `<p class="err">${E(err)}</p>` : ''}
-      <label class="f"><span>Email</span><input name="email" type="email" inputmode="email" autocomplete="email" required></label>
+      <label class="f"><span>Email</span><input name="email" type="email" inputmode="email" autocomplete="email" value="${E(lastEmail)}" required></label>
       ${fg ? '' : `<label class="f"><span>Password</span><input name="password" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" minlength="8" required></label>`}
       <button class="btn blue block" type="submit" ${working ? 'disabled' : ''}>${working ? 'Please wait…' : fg ? 'Email me a reset link' : up ? 'Create account' : 'Log in'}</button>
       ${fg ? '<button type="button" class="link" data-m="in">Back to log in</button>' : up ? '<button type="button" class="link" data-m="in">I already have an account</button>' : '<button type="button" class="link" data-m="forgot">Forgot your password?</button><button type="button" class="link" data-m="up">First time? Create your account</button>'}
@@ -154,11 +154,11 @@ const CLOUD = (() => {
   function onClick(e) { const b = e.target.closest('[data-m]'); if (!b) return; mode = b.dataset.m; err = ''; note = ''; showGate(); }
   async function onSubmit(e) {
     e.preventDefault(); if (working) return;
-    const f = e.target, email = f.email.value.trim(), password = f.password ? f.password.value : '';
+    const f = e.target, email = (lastEmail = f.email.value.trim()), password = f.password ? f.password.value : '';
     working = true; err = ''; note = ''; showGate();
     try {
       if (mode === 'forgot') { await recover(email); note = 'If that email has an account, a reset link is on its way.'; mode = 'in'; }
-      else if (mode === 'up') { const r = await signUp(email, password); if (r === 'in') { hideGate(); working = false; userChanged(); sync(true); return; } note = 'Check your email to confirm your account, then log in here.'; mode = 'in'; }
+      else if (mode === 'up') { const r = await signUp(email, password); if (r === 'in') { hideGate(); working = false; userChanged(); sync(true); return; } note = '✅ Account created. We have emailed ' + email + ' – tap the link in that email to confirm, then come back here and log in.'; mode = 'in'; }
       else { const reload = await signIn(email, password); if (!reload) { hideGate(); working = false; sync(true); return; } }
     } catch (ex) { err = /invalid login/i.test(ex.message) ? 'That email or password is not right.' : ex.message; }
     working = false; showGate();

@@ -1,4 +1,4 @@
--- Sparkles Window Management – database setup.
+-- Window Round Pro – database setup.
 -- Paste into Supabase > SQL Editor > Run. Safe to run again.
 
 -- One row per customer / job / invoice / settings document. Each row belongs to one user, so every

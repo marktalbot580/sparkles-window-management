@@ -1,10 +1,10 @@
-"""End-to-end test: python3 -m http.server 8765 (in the app folder), then python3 tests/run.py
+"""End-to-end test: python3 -m http.server 8766 (in the app folder), then python3 tests/run.py
 Opens every screen on a phone-sized browser, runs a whole round and checks the results. Exits non-zero on failure."""
 import json, os, sys, datetime, tempfile
 from playwright.sync_api import sync_playwright
 
 SHOTS = os.environ.get('SHOTS', tempfile.gettempdir())
-BASE = 'http://localhost:8765/index.html'
+BASE = 'http://localhost:8766/index.html'
 today = datetime.date.today().isoformat()
 fails, errors = [], []
 
@@ -36,6 +36,7 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: errors.append(str(e)))
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
     pg.route('https://api.postcodes.io/postcodes', fake_geo)
+    pg.route('**/config.js', lambda r: r.fulfill(status=200, content_type='application/javascript', body="window.SWM_CONFIG={url:'',key:''};"))   # test the local-only app
     pg.goto(BASE); pg.wait_for_selector('#nav button')
     check('app opens on the Round screen', 'Round' in pg.inner_text('#barSub'))
 
@@ -43,7 +44,7 @@ with sync_playwright() as p:
     pg.click('#setBtn'); pg.wait_for_selector('input[data-n="businessName"]')
     pg.fill('input[data-n="businessName"]', 'Sparkles Window Management')
     pg.fill('input[data-n="homePostcode"]', 'LN1 3AA'); pg.fill('input[data-n="email"]', 'mark@example.com')
-    check('business name shows in the header', 'Sparkles Window Management' in pg.inner_text('#barName'))
+    check('app name shows in the header', 'Window Round Pro' in pg.inner_text('#barName'))
     pg.screenshot(path=f'{SHOTS}/settings.png', full_page=True)
 
     # import customers from CSV

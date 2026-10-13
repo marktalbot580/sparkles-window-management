@@ -1,16 +1,16 @@
-# Sparkles Window Management – going live
+# Window Round Pro – going live
 
 The app already works with no setup: open `index.html` from any web server and everything is kept on that phone.
 To get logins, sync between devices and automatic invoice emails, do these in order. None of it touches the OMB Gas app – this uses its own Supabase project.
 
 ## 1. Put the app on the web (GitHub Pages, free)
-1. On github.com create a **new repository** (for example `sparkles-window-management`), public.
+1. On github.com create a **new repository** (for example `windowroundpro`), public.
 2. Upload every file in this folder to it (keep the `fonts`, `lib` and `backend` folders).
 3. Repository **Settings → Pages → Build from branch → main / root**. After a minute the app is live at `https://<your-username>.github.io/<repo-name>/`.
 4. On the phone: open that address, then **Share → Add to Home Screen**.
 
 ## 2. Supabase (logins + cloud storage) – new project
-1. supabase.com → **New project**, name it `sparkles-window-management`, London region, set a database password and keep it safe.
+1. supabase.com → **New project**, name it `windowroundpro`, London region, set a database password and keep it safe.
 2. **SQL Editor → New query** → paste all of `backend/schema.sql` → Run.
 3. **Project Settings → API**: copy the **Project URL** and the **publishable (anon) key** into `config.js` (`url` and `key`), then upload `config.js` to GitHub again. Never use the `secret` / `service_role` key anywhere in the app.
 4. **Authentication → URL Configuration**: set **Site URL** to the GitHub Pages address from step 1.

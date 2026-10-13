@@ -1,4 +1,4 @@
-/* Sparkles Window Management – a phone-first app for a window cleaning round.
+/* Window Round Pro – a phone-first app for a window cleaning round.
    Plain JavaScript, no build step. Data is kept on the phone and synced to Supabase when signed in. */
 'use strict';
 const APP_VERSION = 'v1';
@@ -125,7 +125,7 @@ function queueEmail(inv) {
 }
 const blobToB64 = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(b); });
 const firstName = n => String(n || '').trim().split(/\s+/)[0] || 'there';
-const bizName = () => settings.businessName || 'Sparkles Window Management';
+const bizName = () => settings.businessName || 'Window Round Pro';
 function emailText(inv) {
   const T = invTotals(inv);
   const bank = [settings.accName && 'Account name: ' + settings.accName, settings.sortCode && 'Sort code: ' + fmtSort(settings.sortCode), settings.accNo && 'Account number: ' + settings.accNo].filter(Boolean).join('\n');
@@ -294,7 +294,7 @@ function render() {
   if (_lastView === ui.view) window.scrollTo(0, y); else window.scrollTo(0, 0);
   _lastView = ui.view;
 }
-function applyBrand() { const n = $('#barName'); if (n) n.textContent = settings.businessName || 'Sparkles Window Management'; document.title = settings.businessName || 'Sparkles Window Management'; }
+function applyBrand() { const n = $('#barName'); if (n) n.textContent = 'Window Round Pro'; document.title = 'Window Round Pro'; }
 const go = (view, o) => { Object.assign(ui, o || {}, { view }); render(); };
 const fld = (b, path, label, o = {}) => {
   const obj = b === 'cust' ? ui.cust : b === 'inv' ? ui.inv : settings, v = getP(obj, path) ?? '';
@@ -501,7 +501,7 @@ function exportCSV() {
 /* ----- settings ----- */
 function renderSettings(v) {
   v.innerHTML = `<h1>Settings</h1>
-    <h2>Your business</h2><div class="card">${fld('set', 'businessName', 'Business name', { cap: 'words', ph: 'Sparkles Window Management' })}${fld('set', 'phone', 'Phone', { type: 'tel', mode: 'tel' })}${fld('set', 'email', 'Email (customers can reply to this)', { type: 'email', mode: 'email', cap: 'none' })}${fld('set', 'address', 'Business address', { area: 1, rows: 3 })}${fld('set', 'homePostcode', 'Home postcode (your round starts here)', { cap: 'characters' })}</div>
+    <h2>Your business</h2><div class="card">${fld('set', 'businessName', 'Business name', { cap: 'words', ph: 'Shown on your invoices and texts' })}${fld('set', 'phone', 'Phone', { type: 'tel', mode: 'tel' })}${fld('set', 'email', 'Email (customers can reply to this)', { type: 'email', mode: 'email', cap: 'none' })}${fld('set', 'address', 'Business address', { area: 1, rows: 3 })}${fld('set', 'homePostcode', 'Home postcode (your round starts here)', { cap: 'characters' })}</div>
     <h2>Invoices</h2><div class="card">
       <div class="f"><span>Email invoices automatically when I tap Complete</span><div class="seg">${['on', 'off'].map(x => `<button type="button" class="${settings.autoEmail === x ? 'on' : ''}" data-act="setOpt" data-k="autoEmail" data-v="${x}">${x === 'on' ? 'Yes' : 'No'}</button>`).join('')}</div></div>
       ${fld('set', 'invPrefix', 'Invoice number prefix', { cap: 'characters' })}${fld('set', 'invNext', 'Next invoice number', { mode: 'numeric' })}${fld('set', 'payDays', 'Days to pay', { mode: 'numeric' })}
@@ -573,7 +573,7 @@ const ACT = {
   setOpt: d => { settings[d.k] = d.v; saveS(); render(); },
   syncNow: () => CLOUD.sync(),
   logout: () => { if (confirm('Log out? Your data stays safe in the cloud.')) CLOUD.signOut(); },
-  backup: () => downloadFile('sparkles-backup-' + todayISO() + '.json', 'application/json', JSON.stringify({ app: 'swm', v: 1, settings, customers, jobs, invoices })),
+  backup: () => downloadFile('windowroundpro-backup-' + todayISO() + '.json', 'application/json', JSON.stringify({ app: 'swm', v: 1, settings, customers, jobs, invoices })),
   toastUndo: () => { }
 };
 document.addEventListener('click', e => {
