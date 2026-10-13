@@ -1,7 +1,7 @@
 // Offline cache so the round still opens with no signal.
-const CACHE = 'swm-v4';
+const CACHE = 'swm-v5';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'cloud.js', 'config.js', 'pdf-inv.js', 'manifest.json', 'logo.svg', 'icon-192.png', 'icon-512.png',
-  'lib/jspdf.umd.min.js', 'fonts/bricolage-grotesque-latin-800-normal.woff2', 'fonts/bricolage-grotesque-latin-700-normal.woff2', 'fonts/instrument-sans-latin-400-normal.woff2', 'fonts/instrument-sans-latin-600-normal.woff2'];
+  'lib/jspdf.umd.min.js', 'fonts/nunito-latin.woff2'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

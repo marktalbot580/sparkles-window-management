@@ -35,8 +35,8 @@ async function buildInvPdf(inv, s) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, H = 297, M = 12, CW = W - 2 * M, FOOT = 16;
-  const BLUE = [15, 134, 198], BLUE_D = [10, 78, 120], SKY = [142, 220, 247], PALE = [227, 245, 253];
-  const INK = [11, 42, 60], GREY = [91, 124, 141], LINE = [190, 218, 232], GREEN = [14, 133, 115];
+  const BLUE = [11, 31, 58], BLUE_D = [22, 54, 94], SKY = [47, 211, 227], PALE = [221, 248, 251];
+  const INK = [11, 31, 58], GREY = [91, 107, 128], LINE = [220, 229, 238], GREEN = [31, 174, 122];
   const logo = await getLogo();
   const ukd = iso => (iso ? iso.split('-').reverse().join('/') : '');
   const T = invTotals(inv), vatOn = T.rate > 0;
