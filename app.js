@@ -36,6 +36,7 @@ const DEFAULTS = {
   bankName: '', accName: '', sortCode: '', accNo: '', invFooter: 'Thank you for your business.',
   autoEmail: 'on', defaultFreq: '4', defaultPrice: '',
   omwText: "Hi {name}, it's {business}. I'm on my way to clean your windows today.",
+  payText: "Hi {name}, just a quick message to let you know your windows have been cleaned. The cost is {amount}.\n\nYou can pay by bank transfer to {bank} (reference {ref}), or I can collect cash.\n\nPlease reply 1 if you're paying by bank transfer, or 2 if you'd like me to collect cash. Thank you! {business}",
   remText: "Hi {name}, it's {business}. Just a reminder that your windows are due to be cleaned {when}. Thank you!",
   orders: {}, updated: 0
 };
@@ -264,6 +265,10 @@ function routeLinks(stops) {
 }
 const telHref = p => 'tel:' + String(p || '').replace(/[^\d+]/g, '');
 const smsHref = (p, body) => 'sms:' + String(p || '').replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(body);
+function payTextFor(inv) {
+  const bank = [settings.sortCode && 'sort code ' + fmtSort(settings.sortCode), settings.accNo && 'account ' + settings.accNo, settings.accName && '(' + settings.accName + ')'].filter(Boolean).join(' ');
+  return fillText(settings.payText, { name: inv.customer.name }).replace(/\{amount\}/g, money(invTotals(inv).total)).replace(/\{bank\}/g, bank || 'the account I will give you').replace(/\{ref\}/g, inv.number);
+}
 const fillText = (t, c, when) => String(t || '').replace(/\{name\}/g, firstName(c.name)).replace(/\{business\}/g, bizName()).replace(/\{when\}/g, when || 'soon');
 
 /* ---------- screens ---------- */
@@ -303,11 +308,11 @@ function stopHtml(s, i) {
   const c = s.c, a = esc(addrFirst(c.address)) + (c.postcode ? ', ' + esc(c.postcode) : '');
   if (s.job) {
     const inv = s.inv, st = inv ? invStatus(inv) : '';
-    const sent = !inv ? '' : inv.sent ? 'emailed ✓' : pending[inv.id] ? 'emailing in a moment…' : inv.sendError ? 'email failed – tap Invoice' : inv.customer.email ? 'not emailed yet' : 'no email address';
+    const sent = !inv ? '' : inv.sent ? (inv.sentTo === 'SMS' ? 'texted ✓' : 'emailed ✓') : pending[inv.id] ? 'emailing in a moment…' : inv.sendError ? 'email failed – tap Invoice' : inv.customer.email ? 'not emailed yet' : 'no email – text instead';
     return `<div class="stop done"><div class="row top"><div class="num">✓</div><div class="grow"><div class="nm">${esc(c.name)}</div><div class="ad">${a}</div></div><div class="pr">${money(s.job.price)}</div></div>
       ${inv ? `<div class="row sp" style="margin-top:10px"><span class="small muted">${esc(inv.number)} · ${sent}</span><span class="badge ${st}">${st}</span></div>
       <div class="seg" style="margin-top:10px">${PAY.map(m => `<button type="button" class="pay ${inv.paid && inv.payMethod === m ? 'on' : ''}" data-act="pay" data-id="${inv.id}" data-m="${m}">${m}</button>`).join('')}</div>
-      <div class="acts"><button class="btn ghost sm" data-act="openInv" data-id="${inv.id}">Open invoice</button>${!inv.sent && !inv.paid ? `<button class="btn ghost sm" data-act="undoJob" data-id="${s.job.id}">Undo</button>` : ''}</div>` : ''}</div>`;
+      <div class="acts">${!inv.customer.email && c.phone && !inv.paid ? `<a class="btn blue sm" data-act="smsSent" data-id="${inv.id}" href="${esc(smsHref(c.phone, payTextFor(inv)))}">${inv.sent ? 'Text again' : 'Text payment request'}</a>` : ''}<button class="btn ghost sm" data-act="openInv" data-id="${inv.id}">Open invoice</button>${!inv.sent && !inv.paid ? `<button class="btn ghost sm" data-act="undoJob" data-id="${s.job.id}">Undo</button>` : ''}</div>` : ''}</div>`;
   }
   const moving = ui.moveId === c.id;
   return `<div class="stop"><div class="row top"><div class="num">${i + 1}</div><div class="grow"><div class="nm">${esc(c.name)} ${s.overdue ? '<span class="badge overdue">overdue</span>' : ''}</div><div class="ad">${a}</div></div><div class="pr">${c.price ? money(numOf(c.price)) : '–'}</div></div>
@@ -442,7 +447,7 @@ function renderInvoices(v) {
     <button class="btn block" data-act="csvOut">Download for my accountant (CSV)</button><div class="gap"></div>
     <div class="chips">${chip('all', 'All')}${chip('unpaid', 'Unpaid')}${late.length ? chip('overdue', 'Overdue (' + late.length + ')') : ''}${chip('paid', 'Paid')}</div>
     ${shown.length ? shown.map(i => `<button class="item" data-act="openInv" data-id="${i.id}"><div class="row sp"><span class="t">${esc(i.customer.name || 'No customer')}</span><span class="badge ${invStatus(i)}">${invStatus(i)}</span></div>
-      <div class="s">${esc(addrFirst(i.jobAddress) || 'No address')}</div><div class="row sp"><span class="s">${esc(i.number)} · ${ukDate(i.date)}${i.paid ? ' · ' + esc(i.payMethod || '') : ' · due ' + ukDate(i.due)}${i.sent ? ' · emailed ✓' : ''}</span><span class="t">${money(invTotals(i).total)}</span></div></button>`).join('') : `<div class="empty">${invoices.length ? 'Nothing in this view.' : 'No invoices yet.<br>They appear here when you tap Complete on the round.'}</div>`}`;
+      <div class="s">${esc(addrFirst(i.jobAddress) || 'No address')}</div><div class="row sp"><span class="s">${esc(i.number)} · ${ukDate(i.date)}${i.paid ? ' · ' + esc(i.payMethod || '') : ' · due ' + ukDate(i.due)}${i.sent ? (i.sentTo === 'SMS' ? ' · texted ✓' : ' · emailed ✓') : ''}</span><span class="t">${money(invTotals(i).total)}</span></div></button>`).join('') : `<div class="empty">${invoices.length ? 'Nothing in this view.' : 'No invoices yet.<br>They appear here when you tap Complete on the round.'}</div>`}`;
 }
 function renderInvEdit(v) {
   const i = ui.inv, T = invTotals(i);
@@ -504,7 +509,7 @@ function renderSettings(v) {
       ${settings.vatReg === 'Yes' ? fld('set', 'vatRate', 'VAT rate (%)', { mode: 'decimal' }) + fld('set', 'vatNumber', 'VAT number') : ''}
       ${fld('set', 'invFooter', 'Message at the bottom of invoices', { area: 1, rows: 2 })}</div>
     <h2>Bank details (shown on invoices)</h2><div class="card">${fld('set', 'bankName', 'Bank')}${fld('set', 'accName', 'Account name')}${fld('set', 'sortCode', 'Sort code', { mode: 'numeric' })}${fld('set', 'accNo', 'Account number', { mode: 'numeric' })}</div>
-    <h2>Customers</h2><div class="card">${fld('set', 'defaultFreq', 'Default weeks between cleans', { mode: 'numeric' })}${fld('set', 'omwText', '"On my way" text', { area: 1, rows: 3, hint: 'Use {name} and {business}.' })}${fld('set', 'remText', 'Reminder text', { area: 1, rows: 3, hint: 'Use {name}, {business} and {when}.' })}</div>
+    <h2>Customers</h2><div class="card">${fld('set', 'defaultFreq', 'Default weeks between cleans', { mode: 'numeric' })}${fld('set', 'omwText', '"On my way" text', { area: 1, rows: 3, hint: 'Use {name} and {business}.' })}${fld('set', 'payText', 'Payment text (for customers with no email)', { area: 1, rows: 6, hint: 'Use {name}, {amount}, {bank}, {ref} and {business}.' })}${fld('set', 'remText', 'Reminder text', { area: 1, rows: 3, hint: 'Use {name}, {business} and {when}.' })}</div>
     <h2>Account and data</h2><div class="card"><div class="small muted" id="syncMsg" style="margin-bottom:10px"></div>
       ${CLOUD.on ? `<div class="small muted" style="margin-bottom:10px">Signed in as ${esc(CLOUD.email())}</div><button class="btn block" data-act="syncNow">Sync now</button><div class="gap"></div>` : ''}
       <button class="btn block" data-act="backup">Download a backup</button><div class="gap"></div>
@@ -535,6 +540,7 @@ const ACT = {
   skipStop: d => { const c = customers.find(x => x.id === d.id); if (!c) return; c.next = c.freq > 0 ? addDays(ui.roundDate, c.freq * 7) : ''; touch(c); saveC(); toast('Skipped – next ' + (c.next ? ukDate(c.next) : 'none')); render(); },
   addToRound: () => { ui.pickDay = true; go('cust', { search: '', pickDay: true }); toast('Tap a customer to put them on ' + ukDate(ui.roundDate)); },
   remind: () => go('remind'),
+  smsSent: d => { const i = invoices.find(x => x.id === d.id); if (i) { i.sent = Date.now(); i.sentTo = 'SMS'; touch(i); saveI(); } setTimeout(render, 400); },
   remSent: d => { ui.remSent[d.k] = true; setTimeout(render, 400); },
   sendAll: async () => { const L = invoices.filter(i => !i.sent && i.customer.email && !pending[i.id]); let n = 0; for (const i of L) if (await sendInvoiceEmail(i)) n++; toast(n + ' of ' + L.length + ' emailed'); },
   calPrev: () => { if (--ui.calM < 0) { ui.calM = 11; ui.calY--; } render(); },
